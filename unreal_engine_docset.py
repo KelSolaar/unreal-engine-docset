@@ -387,7 +387,7 @@ def collect_api_information(
         if search is not None:
             return ApiInformation(api_name, api_type, entry_type)
 
-    return ApiInformation(api_name, None, None)
+    return ApiInformation(api_name, "object", "Object")
 
 
 def process_cpp_html_file(
