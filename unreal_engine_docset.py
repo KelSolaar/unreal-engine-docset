@@ -11,6 +11,7 @@ docset from `Unreal Engine documentation <https://docs.unrealengine.com>`__:
 from __future__ import annotations
 
 import contextlib
+import html
 import logging
 import multiprocessing
 import re
@@ -43,14 +44,12 @@ __all__ = [
     "Entry",
     "MAPPING_API_TYPE_TO_ENTRY_TYPE",
     "join_path",
+    "read_xml_file",
     "collector_default",
     "collector_nohref",
-    "collector_constructor",
-    "collector_destructor",
     "COLLECTORS_CPP",
     "collect_api_name_and_syntax",
     "collect_api_information",
-    "read_xml_file",
     "process_cpp_html_file",
     "process_cpp_docset",
     "generate_database",
@@ -153,6 +152,44 @@ def join_path(parent: Path | str, name: str) -> str:
     return f'{str(parent).replace("/index.html", "")}/{name}'
 
 
+def read_xml_file(xml_path: Path | str, attempts: int = 10) -> lxml.html.HtmlElement:
+    """
+    Attempt to read given *XML* file.
+
+    Because of multiprocessing, it seems like on *macOS*, files might be
+    accessed concurrently causing *XML* parsing failure.
+
+    Parameters
+    ----------
+    xml_path
+        Path of the *XML* file to read.
+    attempts
+        Number of attempts to try to read the file. One is usually required.
+
+    Returns
+    -------
+    :class:`lxml.html.HtmlElement`
+        *XML* element.
+    """
+
+    i = 0
+    while i < attempts:
+        try:
+            with open(xml_path, "r") as xml_file:
+                xml = xml_file.read()
+
+            return fromstring(xml.encode("utf-8"))
+        except etree.ParserError:
+            logger.debug(
+                'Could not parse "%s" file on attempt %s, sleeping...', xml_path, i + 1
+            )
+            i += 1
+            time.sleep(0.1)
+            continue
+
+    raise RuntimeError('Could not parse "%s" file!', xml_path)
+
+
 def collector_default(
     elements: List[lxml.html.HtmlElement],
     api_information: ApiInformation,
@@ -180,12 +217,14 @@ def collector_default(
 
     collection = []
     for element in elements:
-        href = element.attrib["href"]
-        name = href.replace("/index.html", "").replace("/", ".")
-        if api_information.ue_type is not None:
-            name = f"{api_information.name}.{name}"
+        collected_path = join_path(html_path, element.attrib["href"])
 
-        collection.append((name, join_path(html_path, href)))
+        if not Path(collected_path).exists():
+            continue
+
+        collected_name = collect_api_information(read_xml_file(collected_path)).name
+
+        collection.append((collected_name, collected_path))
 
     return collection
 
@@ -224,73 +263,6 @@ def collector_nohref(
     return collection
 
 
-def collector_constructor(
-    elements: List[lxml.html.HtmlElement],
-    api_information: ApiInformation,
-    html_path: Path,
-) -> List[Tuple[str, str]]:
-    """
-    Collect the *API* data for given collector elements.
-
-    Parameters
-    ----------
-    elements
-        Elements to collect the data from.
-    api_information
-        *Unreal Engine* object and *Dash* documentation *API* information.
-    html_path
-        Path of the file the elements are contained into.
-
-    Returns
-    -------
-    :class:`list`
-        Collected data.
-    """
-
-    collection = []
-    for element in elements:
-        href = element.attrib["href"]
-        name = href.replace("/index.html", "").replace("__ctor", "").replace("/", ".")
-        name = f"{api_information.name}.{api_information.name}(){name}"
-
-        collection.append((name, join_path(html_path, href)))
-
-    return collection
-
-
-def collector_destructor(
-    elements: List[lxml.html.HtmlElement],
-    api_information: ApiInformation,
-    html_path: Path,
-) -> List[Tuple[str, str]]:
-    """
-    Collect the *API* data for given destructor elements.
-
-    Parameters
-    ----------
-    elements
-        Elements to collect the data from.
-    api_information
-        *Unreal Engine* object and *Dash* documentation *API* information.
-    html_path
-        Path of the file the elements are contained into.
-
-    Returns
-    -------
-    :class:`list`
-        Collected data.
-    """
-
-    collection = []
-    for element in elements:
-        href = element.attrib["href"]
-        name = f"{api_information.name}.~{api_information.name}()"
-
-        collection.append((name, join_path(html_path, href)))
-
-    return collection
-
-
 COLLECTORS_CPP: Tuple[Collector, ...] = (
     Collector(
         "Module",
@@ -305,12 +277,12 @@ COLLECTORS_CPP: Tuple[Collector, ...] = (
     Collector(
         "Constructor",
         './/div[@id="constructor"]//td[@class="name-cell"][1]/a',
-        collector_constructor,
+        collector_default,
     ),
     Collector(
         "Destructor",
         './/div[@id="destructor"]//td[@class="name-cell"][1]/a',
-        collector_destructor,
+        collector_default,
     ),
     Collector(
         "Type",
@@ -418,44 +390,6 @@ def collect_api_information(
     return ApiInformation(api_name, None, None)
 
 
-def read_xml_file(xml_path: Path | str, attempts: int = 10) -> lxml.html.HtmlElement:
-    """
-    Attempt to read given *XML* file.
-
-    Because of multiprocessing, it seems like on *macOS*, files might be
-    accessed concurrently causing *XML* parsing failure.
-
-    Parameters
-    ----------
-    xml_path
-        Path of the *XML* file to read.
-    attempts
-        Number of attempts to try to read the file. One is usually required.
-
-    Returns
-    -------
-    :class:`lxml.html.HtmlElement`
-        *XML* element.
-    """
-
-    i = 0
-    while i < attempts:
-        try:
-            with open(xml_path, "r") as xml_file:
-                xml = xml_file.read()
-
-            return fromstring(xml.encode("utf-8"))
-        except etree.ParserError:
-            logger.debug(
-                'Could not parse "%s" file on attempt %s, sleeping...', xml_path, i + 1
-            )
-            i += 1
-            time.sleep(0.1)
-            continue
-
-    raise RuntimeError('Could not parse "%s" file!', xml_path)
-
-
 def process_cpp_html_file(
     html_path: Path,
     collectors: Tuple = COLLECTORS_CPP,
@@ -500,6 +434,7 @@ def process_cpp_html_file(
     entries = []
     for collector in collectors:
         elements = xml.xpath(collector.xpath)
+        anchors = []
         for i, collection in enumerate(
             collector.processor(elements, api_information, html_path)
         ):
@@ -520,9 +455,20 @@ def process_cpp_html_file(
             if add_dash_anchors:
                 anchor_element = etree.Element("a")
                 anchor_element.set("class", "dashAnchor")
+                anchor_name = collected_name.split("::")[-1]
+
+                suffix = ""
+                if anchor_name in anchors:
+                    count = anchors.count(anchor_name)
+                    suffix = f" (Overload {count})"
+
+                anchors.append(anchor_name)
+
+                anchor_name = f"{anchor_name}{suffix}"
+
                 anchor_element.set(
                     "name",
-                    f'//apple_ref/cpp/{collected_type}/{collected_name.replace("/", ".")}',
+                    f"//apple_ref/cpp/{collected_type}/{html.escape(anchor_name)}",
                 )
                 elements[i].addprevious(anchor_element)
 
