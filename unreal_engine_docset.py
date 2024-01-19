@@ -15,6 +15,7 @@ import logging
 import multiprocessing
 import os
 import re
+import shutil
 import sqlite3
 import time
 import xml.etree.ElementTree as Et
@@ -952,6 +953,10 @@ def generate_docset(input: str, output: str) -> None:  # noqa: A002
         mapping.append(("dashIndexFilePath", "string", "en-US/BluepringAPI/index.html"))
 
     generate_plist(contents_directory / "Info.plist", mapping)
+
+    shutil.copyfile(
+        Path(__file__).parent / "icon.png", Path(docset_directory) / "icon.png"
+    )
 
 
 if __name__ == "__main__":
