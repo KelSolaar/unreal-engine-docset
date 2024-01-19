@@ -528,7 +528,6 @@ def process_cpp_html_file(
         for i, collection in enumerate(
             collector.processor(elements, api_information, html_path)
         ):
-            print(collection)
             collected_name, collected_html_path = collection
 
             if not Path(collected_html_path).exists():
@@ -878,10 +877,10 @@ def generate_docset(input: str, output: str) -> None:
         *Dash* docset output directory.
     """
 
-    if "blueprint" in Path(input).stem.lower():
+    if "cpp" in Path(input).stem.lower():
+        docset_type = "c++"
+    elif "blueprint" in Path(input).stem.lower():
         docset_type = "blueprint"
-    elif "cpp" in Path(input).stem.lower():
-        docset_type = "cpp"
     else:
         logging.error("Unsupported docset type, exiting!")
         return
@@ -893,16 +892,16 @@ def generate_docset(input: str, output: str) -> None:
     documents_directory = resources_directory / "Documents"
     documents_directory.mkdir(parents=True, exist_ok=True)
 
-    if docset_type == "blueprint":
-        api_directory = documents_directory / "en-US" / "BlueprintAPI"
-        label = "Blueprint"
-        processor = process_blueprint_docset
-        online = "https://docs.unrealengine.com/en-US/BlueprintAPI"
-    elif docset_type == "cpp":
+    if docset_type == "c++":
         api_directory = documents_directory / "en-US" / "API"
         label = "C++"
         processor = process_cpp_docset
         online = "https://docs.unrealengine.com/en-US/API"
+    elif docset_type == "blueprint":
+        api_directory = documents_directory / "en-US" / "BlueprintAPI"
+        label = "Blueprint"
+        processor = process_blueprint_docset
+        online = "https://docs.unrealengine.com/en-US/BlueprintAPI"
     else:
         logging.error("Unsupported docset type, exiting!")
         return
@@ -930,9 +929,9 @@ def generate_docset(input: str, output: str) -> None:
         ("isJavaScriptEnabled", "true", None),
     ]
 
-    if docset_type == "cpp":
+    if docset_type == "c++":
         mapping.append(("dashIndexFilePath", "string", "en-US/API/index.html"))
-    elif docset_type == "cpp":
+    elif docset_type == "blueprint":
         mapping.append(("dashIndexFilePath", "string", "en-US/BluepringAPI/index.html"))
 
     generate_plist(contents_directory / "Info.plist", mapping)
