@@ -17,11 +17,11 @@ import os
 import re
 import sqlite3
 import time
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as Et
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Callable, List, Tuple, cast
+from typing import Callable, cast
 from xml.dom import minidom
 
 import click
@@ -75,14 +75,14 @@ class Collector:
     type
          Entry type corresponding to a supported *Dash*
         `entry type <https://kapeli.com/docsets#supportedentrytypes>`__.
-    xpath
-        *XPath* expression to collect the data.
+    predicate
+        *XPath* expression predicate to collect the data.
     processor
         Callable processing the collected data.
     """
 
-    type: str
-    xpath: str
+    type: str  # noqa: A003
+    predicate: str
     processor: Callable
 
 
@@ -124,7 +124,7 @@ class Entry:
 
     name: str
     path: str
-    type: str
+    type: str  # noqa: A003
 
 
 MAPPING_API_TYPE_TO_ENTRY_TYPE: dict = {
@@ -152,10 +152,12 @@ class chdir:
         self._old_cwd = []
 
     def __enter__(self):
+        """Set the current working directory."""
         self._old_cwd.append(os.getcwd())
         os.chdir(self.path)
 
     def __exit__(self, *excinfo):
+        """Restore the current working directory."""
         os.chdir(self._old_cwd.pop())
 
 
@@ -204,7 +206,7 @@ def read_xml_file(xml_path: Path | str, attempts: int = 10) -> lxml.html.HtmlEle
     i = 0
     while i < attempts:
         try:
-            with open(xml_path, "r") as xml_file:
+            with open(xml_path) as xml_file:
                 xml = xml_file.read()
 
             return fromstring(xml.encode("utf-8"))
@@ -220,10 +222,10 @@ def read_xml_file(xml_path: Path | str, attempts: int = 10) -> lxml.html.HtmlEle
 
 
 def collector_cpp_default(
-    elements: List[lxml.html.HtmlElement],
-    parent_api_information: ApiInformation,
+    elements: list[lxml.html.HtmlElement],
+    parent_api_information: ApiInformation,  # noqa: ARG001
     html_path: Path,
-) -> List[Tuple[str, str]]:
+) -> list[tuple[str, str]]:
     """
     Collect the *C++* *API* data for given elements.
 
@@ -260,10 +262,10 @@ def collector_cpp_default(
 
 
 def collector_cpp_nohref(
-    elements: List[lxml.html.HtmlElement],
+    elements: list[lxml.html.HtmlElement],
     parent_api_information: ApiInformation,
     html_path: Path,
-) -> List[Tuple[str, str]]:
+) -> list[tuple[str, str]]:
     """
     Collect the *C++* *API* data for given elements without an ``href``.
 
@@ -294,7 +296,7 @@ def collector_cpp_nohref(
     return collection
 
 
-COLLECTORS_CPP: Tuple[Collector, ...] = (
+COLLECTORS_CPP: tuple[Collector, ...] = (
     Collector(
         "Module",
         './/div[@class="modules-list"]//td[@class="name-cell"]/a[not(@class="dashAnchor")]',
@@ -302,22 +304,26 @@ COLLECTORS_CPP: Tuple[Collector, ...] = (
     ),
     Collector(
         "Class",
-        './/div[@id="classes"]//td[@class="name-cell"][1]/a[not(@class="dashAnchor")]',
+        './/div[@id="classes"]//td[@class="name-cell"][1]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Constructor",
-        './/div[@id="constructor"]//td[@class="name-cell"][1]/a[not(@class="dashAnchor")]',
+        './/div[@id="constructor"]//td[@class="name-cell"][1]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Destructor",
-        './/div[@id="destructor"]//td[@class="name-cell"][1]/a[not(@class="dashAnchor")]',
+        './/div[@id="destructor"]//td[@class="name-cell"][1]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Type",
-        './/div[@id="typedefs"]//td[@class="name-cell"][1]/a[not(@class="dashAnchor")]',
+        './/div[@id="typedefs"]//td[@class="name-cell"][1]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
@@ -327,12 +333,14 @@ COLLECTORS_CPP: Tuple[Collector, ...] = (
     ),
     Collector(
         "Variable",
-        './/div[@id="variables"]//td[@class="name-cell"][2]/a[not(@class="dashAnchor")]',
+        './/div[@id="variables"]//td[@class="name-cell"][2]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Variable",
-        './/div[@id="deprecatedvariables"]//td[@class="name-cell"][2]/a[not(@class="dashAnchor")]',
+        './/div[@id="deprecatedvariables"]//td[@class="name-cell"][2]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
@@ -347,17 +355,20 @@ COLLECTORS_CPP: Tuple[Collector, ...] = (
     ),
     Collector(
         "Constant",
-        './/div[@id="constants"]//td[@class="name-cell"][1]/a[not(@class="dashAnchor")]',
+        './/div[@id="constants"]//td[@class="name-cell"][1]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Function",
-        './/div[starts-with(@id, "functions_")]//td[@class="name-cell"][2]/a[not(@class="dashAnchor")]',
+        './/div[starts-with(@id, "functions_")]//td[@class="name-cell"][2]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
     Collector(
         "Function",
-        './/div[starts-with(@id, "deprecatedfunctions")]//td[@class="name-cell"][2]/a[not(@class="dashAnchor")]',
+        './/div[starts-with(@id, "deprecatedfunctions")]//td[@class="name-cell"][2]/a'
+        '[not(@class="dashAnchor")]',
         collector_cpp_default,
     ),
 )
@@ -365,10 +376,10 @@ COLLECTORS_CPP: Tuple[Collector, ...] = (
 
 
 def collector_blueprint_default(
-    elements: List[lxml.html.HtmlElement],
+    elements: list[lxml.html.HtmlElement],
     parent_api_information: ApiInformation,
     html_path: Path,
-) -> List[Tuple[str, str]]:
+) -> list[tuple[str, str]]:
     """
     Collect the *Blueprint++* *API* data for given elements.
 
@@ -406,15 +417,17 @@ def collector_blueprint_default(
     return collection
 
 
-COLLECTORS_BLUEPRINT: Tuple[Collector, ...] = (
+COLLECTORS_BLUEPRINT: tuple[Collector, ...] = (
     Collector(
         "Function",
-        './/h2[@id="actions"]/following-sibling::div[@class="member-list"]//td[@class="name-cell"]/a[not(@class="dashAnchor")]',
+        './/h2[@id="actions"]/following-sibling::div[@class="member-list"]//td[@class="name-cell"]/a'
+        '[not(@class="dashAnchor")]',
         collector_blueprint_default,
     ),
     Collector(
         "Category",
-        './/h2[@id="categories"]/following-sibling::div[@class="member-list"]//td[@class="name-cell"]/a[not(@class="dashAnchor")]',
+        './/h2[@id="categories"]/following-sibling::div[@class="member-list"]//td[@class="name-cell"]/a'
+        '[not(@class="dashAnchor")]',
         collector_blueprint_default,
     ),
 )
@@ -423,7 +436,7 @@ COLLECTORS_BLUEPRINT: Tuple[Collector, ...] = (
 
 def collect_api_name_and_syntax(
     xml: lxml.html.HtmlElement,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Collect the *API* name and syntax from given *XML* element.
 
@@ -438,7 +451,7 @@ def collect_api_name_and_syntax(
         Collected *API* name and syntax.
     """
 
-    title = next(iter(xml.xpath('.//h1[@id="H1TitleId"]/text()')))
+    title = next(iter(xml.xpath('.//h1[@id="H1TitleId"]/text()'))).strip()
 
     syntax = "\n".join(
         element.text_content()
@@ -480,9 +493,9 @@ def collect_api_information(
 
 def process_cpp_html_file(
     html_path: Path,
-    collectors: Tuple = COLLECTORS_CPP,
+    collectors: tuple = COLLECTORS_CPP,
     add_dash_anchors: bool = True,
-) -> List[Entry]:
+) -> list[Entry]:
     """
     Process given *Unreal Engine* *C++* *HTML* file using given collectors.
 
@@ -523,7 +536,7 @@ def process_cpp_html_file(
 
     entries = []
     for collector in collectors:
-        elements = xml.xpath(collector.xpath)
+        elements = xml.xpath(collector.predicate)
         anchors = []
         for i, collection in enumerate(
             collector.processor(elements, api_information, html_path)
@@ -630,9 +643,9 @@ def process_cpp_docset(api_directory: Path) -> set[Entry]:
 
 def process_blueprint_html_file(
     html_path: Path,
-    collectors: Tuple = COLLECTORS_BLUEPRINT,
+    collectors: tuple = COLLECTORS_BLUEPRINT,
     add_dash_anchors: bool = True,
-) -> List[Entry]:
+) -> list[Entry]:
     """
     Process given *Unreal Engine* *Blueprint* *HTML* file using given collectors.
 
@@ -673,7 +686,7 @@ def process_blueprint_html_file(
 
     entries = []
     for collector in collectors:
-        elements = xml.xpath(collector.xpath)
+        elements = xml.xpath(collector.predicate)
         for i, collection in enumerate(
             collector.processor(elements, api_information, html_path)
         ):
@@ -762,7 +775,7 @@ def process_blueprint_docset(api_directory: Path) -> set[Entry]:
 
 
 def generate_database(
-    database_path: Path, documents_directory: Path, entries: set[Entry]
+    database_path: Path, documents_directory: Path | str, entries: set[Entry]
 ) -> None:
     """
     Generate the *SQLite3* database storing the *Dash* entries.
@@ -786,7 +799,11 @@ def generate_database(
 
     try:
         cursor.execute(
-            "CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);"
+            "CREATE TABLE searchIndex("
+            "id INTEGER PRIMARY KEY, "
+            "name TEXT, "
+            "type TEXT, "
+            "path TEXT);"
         )
         cursor.execute("CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);")
     except sqlite3.OperationalError as error:
@@ -808,7 +825,7 @@ def generate_database(
     database.close()
 
 
-def generate_plist(path: Path, mapping: List[Tuple[str, str, str]]) -> None:
+def generate_plist(path: Path, mapping: list[tuple[str, str, str]]) -> None:
     """
     Generate the *PLIST* file for *Dash*.
 
@@ -823,28 +840,28 @@ def generate_plist(path: Path, mapping: List[Tuple[str, str, str]]) -> None:
 
     logger.info('Generating "%s" plist file...', path)
 
-    plist_element = ET.Element("plist")
+    plist_element = Et.Element("plist")
     plist_element.set("version", "1.0")
 
-    mapping_element = ET.SubElement(plist_element, "dict")
+    mapping_element = Et.SubElement(plist_element, "dict")
 
     for key, type_, value in mapping:
-        key_element = ET.SubElement(mapping_element, "key")
+        key_element = Et.SubElement(mapping_element, "key")
         key_element.text = key
         if type_ in ["string", "true", "false"]:
-            value_element = ET.SubElement(mapping_element, type_)
+            value_element = Et.SubElement(mapping_element, type_)
             if type_ == "string":
                 value_element.text = value
 
-    xml = minidom.parseString(ET.tostring(plist_element, "utf-8")).toprettyxml(
-        indent="\t"
-    )
+    xml = minidom.parseString(  # noqa: S318
+        Et.tostring(plist_element, "utf-8")
+    ).toprettyxml(indent="\t")
     xml = xml.split("\n", 1)[1]
 
     header = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
-        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '"http://www.apple.com/DTDs/Propertylist-1.0.dtd">\n'
     )
 
     with open(path, "w") as plist_file:
@@ -865,7 +882,7 @@ def generate_plist(path: Path, mapping: List[Tuple[str, str, str]]) -> None:
     type=click.Path(exists=True),
     help="Output directory to generate to.",
 )
-def generate_docset(input: str, output: str) -> None:
+def generate_docset(input: str, output: str) -> None:  # noqa: A002
     """
     Generate the *Dash* docset from given input *Unreal Engine* *tgz* file.
 
