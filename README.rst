@@ -8,7 +8,7 @@ A `Python <https://www.python.org>`__ module defining objects to generate a
 It is open source and freely available under the
 `BSD-3-Clause <https://opensource.org/licenses/BSD-3-Clause>`__ terms.
 
-..  image:: https://raw.githubusercontent.com/KelSolaar/unreal-engine-docset/main/docs/_static/UnrealEngineC++APILandingPage.png
+..  image:: https://github.com/KelSolaar/unreal-engine-docset/blob/main/docs/_static/UnrealEngineC%2B%2BAPILandingPage.png
 
 .. contents:: **Table of Contents**
     :backlinks: none
