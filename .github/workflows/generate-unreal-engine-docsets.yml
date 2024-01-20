@@ -1,0 +1,63 @@
+name: Generate Unreal Engine Docsets
+
+on: [push, pull_request]
+
+jobs:
+  build-unreal-engine-docsets:
+    name: Generate Unreal Engine Docsets
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Environment Variables
+        run: |
+          echo "CI_UNREAL_ENGINE_VERSION=5.3" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | POETRY_HOME=$HOME/.poetry python3 -
+          echo "$HOME/.poetry/bin" >> $GITHUB_PATH
+        shell: bash
+      - name: Install Package Dependencies
+        run: |
+          poetry run python -m pip install --upgrade pip
+          poetry install
+        shell: bash
+      - name: Install Legendary
+        run: |
+          pip install legendary-gl
+        shell: bash
+      - name: Authenticate with Epic Games
+        run: |
+          mkdir -p ~/.config/legendary
+          echo "${{ secrets.LEGENDARY_USER_JSON }}" | base64 --decode > ~/.config/legendary/user.json
+          legendary auth
+        shell: bash
+      - name: Download Unreal Engine
+        run: |
+          legendary list --include-ue
+          legendary download UE_$CI_UNREAL_ENGINE_VERSION --include-ue --platform Windows --install-tag "" --yes
+        shell: bash
+      - name: Generate C++ Docset
+        run: |
+          poetry run python unreal_engine_docset.py --input "~/Games/UE_$CI_UNREAL_ENGINE_VERSION/Engine/Documentation/Builds/CppAPI-HTML.tgz" --output D:/
+          cd /D && tar -czf /D/UnrealEngineC++API.docset.tar.gz UnrealEngineC++API.docset
+        shell: bash
+      - name: Generate Blueprint Docset
+        run: |
+          poetry run python unreal_engine_docset.py --input "~/Games/UE_$CI_UNREAL_ENGINE_VERSION/Engine/Documentation/Builds/BlueprintAPI-HTML.tgz" --output D:/
+          cd /D && tar -czf /D/UnrealEngineBlueprintAPI.docset.tar.gz UnrealEngineBlueprintAPI.docset
+        shell: bash
+      - uses: actions/upload-artifact@v2
+        with:
+          name: UnrealEngineC++API.docset
+          path: |
+            D:/UnrealEngineC++API.docset.tar.gz
+      - uses: actions/upload-artifact@v2
+        with:
+          name: UnrealEngineBlueprintAPI.docset
+          path: |
+            D:/UnrealEngineBlueprintAPI.docset.tar.gz
