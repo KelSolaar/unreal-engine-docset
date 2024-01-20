@@ -17,12 +17,13 @@ import os
 import re
 import shutil
 import sqlite3
+import tempfile
 import time
 import xml.etree.ElementTree as Et
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Callable, cast
+from typing import Callable, TypedDict, cast
 from xml.dom import minidom
 
 import click
@@ -31,6 +32,7 @@ import setuptools.archive_util
 from lxml import etree  # pyright: ignore
 from lxml.html import fromstring, tostring
 from tqdm.contrib.concurrent import process_map
+from typing_extensions import Unpack
 
 __author__ = "Thomas Mansencal"
 __copyright__ = "Copyright 2024 Thomas Mansencal"
@@ -55,9 +57,11 @@ __all__ = [
     "collect_api_name_and_syntax",
     "collect_api_information",
     "process_cpp_html_file",
+    "KwargsDocsetProcessor",
     "process_cpp_docset",
     "process_blueprint_html_file",
     "process_blueprint_docset",
+    "process_python_docset",
     "generate_database",
     "generate_plist",
     "generate_docset",
@@ -590,14 +594,39 @@ def process_cpp_html_file(
     return entries
 
 
-def process_cpp_docset(api_directory: Path) -> set[Entry]:
+class KwargsDocsetProcessor(TypedDict):
     """
-    Process given *Unreal Engine* *C++* docset.
+    Define the keyword arguments for a docset processor.
 
     Parameters
     ----------
     api_directory
          Docset *API* path, e.g.``en-US/API``.
+    docset_name
+         Docset name, e.g.``UnrealEngineC++.docset``.
+    online_url
+        Online redirect *URL*.
+    output_directory
+         Docset output directory.
+    unpacking_directory
+         Docset unpacking directory.
+    """
+
+    api_directory: Path
+    docset_name: str
+    online_url: str
+    output_directory: Path
+    unpacking_directory: Path
+
+
+def process_cpp_docset(**kwargs: Unpack[KwargsDocsetProcessor]) -> set[Entry]:
+    """
+    Process given *Unreal Engine* *C++* docset.
+
+    Other Parameters
+    ----------------
+    kwargs
+        See :class:`KwargsProcessor` class documentation.
 
     Returns
     -------
@@ -607,7 +636,10 @@ def process_cpp_docset(api_directory: Path) -> set[Entry]:
 
     logger.info("Processing C++ docset...")
 
+    api_directory = kwargs["api_directory"]
+
     css_path = api_directory / ".." / ".." / "Include" / "CSS" / "udn_public.css"
+
     with open(css_path, "a") as css_file:
         css_file.write(
             """
@@ -722,14 +754,14 @@ def process_blueprint_html_file(
     return entries
 
 
-def process_blueprint_docset(api_directory: Path) -> set[Entry]:
+def process_blueprint_docset(**kwargs: Unpack[KwargsDocsetProcessor]) -> set[Entry]:
     """
     Process given *Unreal Engine* *Blueprint* docset.
 
-    Parameters
-    ----------
-    api_directory
-         Docset *API* path, e.g.``en-US/BlueprintAPI``.
+    Other Parameters
+    ----------------
+    kwargs
+        See :class:`KwargsProcessor` class documentation.
 
     Returns
     -------
@@ -739,7 +771,10 @@ def process_blueprint_docset(api_directory: Path) -> set[Entry]:
 
     logger.info("Processing Blueprint docset...")
 
+    api_directory = kwargs["api_directory"]
+
     css_path = api_directory / ".." / ".." / "Include" / "CSS" / "udn_public.css"
+
     with open(css_path, "a") as css_file:
         css_file.write(
             """
@@ -773,6 +808,47 @@ def process_blueprint_docset(api_directory: Path) -> set[Entry]:
             )
         )
     )
+
+
+def process_python_docset(**kwargs: Unpack[KwargsDocsetProcessor]) -> set[Entry]:
+    """
+    Process given *Unreal Engine* *Python* docset.
+
+    This uses `doc2dash <https://github.com/hynek/doc2dash>`__ *API*.
+
+    Other Parameters
+    ----------------
+    kwargs
+        See :class:`KwargsProcessor` class documentation.
+
+    Returns
+    -------
+    :class:`set`
+        Set of entries.
+    """
+
+    from doc2dash.__main__ import main
+
+    main.callback(  # pyright: ignore
+        source=Path(kwargs["unpacking_directory"]),
+        force=True,
+        name=kwargs["docset_name"],
+        quiet=False,
+        verbose=True,
+        destination=kwargs["output_directory"],
+        add_to_dash=False,
+        add_to_global=False,
+        icon=None,
+        icon_2x=None,
+        index_page=Path("index.html"),
+        enable_js=True,
+        online_redirect_url=kwargs["online_url"],
+        playground_url=None,
+        parser_type=None,
+        full_text_search="off",
+    )
+
+    return set()
 
 
 def generate_database(
@@ -899,12 +975,16 @@ def generate_docset(input: str, output: str) -> None:  # noqa: A002
         docset_type = "c++"
     elif "blueprint" in Path(input).stem.lower():
         docset_type = "blueprint"
+    elif "python" in Path(input).stem.lower():
+        docset_type = "python"
     else:
         logging.error("Unsupported docset type, exiting!")
         return
 
-    docset_name = f"UnrealEngine{docset_type.title()}.docset"
-    docset_directory = Path(output) / docset_name
+    output_directory = Path(output)
+
+    docset_name = f"UnrealEngine{docset_type.title()}API.docset"
+    docset_directory = output_directory / docset_name
     contents_directory = docset_directory / "Contents"
     resources_directory = contents_directory / "Resources"
     documents_directory = resources_directory / "Documents"
@@ -914,33 +994,49 @@ def generate_docset(input: str, output: str) -> None:  # noqa: A002
         api_directory = documents_directory / "en-US" / "API"
         label = "C++"
         processor = process_cpp_docset
-        online = "https://docs.unrealengine.com/en-US/API"
+        online_url = "https://docs.unrealengine.com/en-US/API"
+        unpacking_directory = documents_directory
     elif docset_type == "blueprint":
         api_directory = documents_directory / "en-US" / "BlueprintAPI"
         label = "Blueprint"
         processor = process_blueprint_docset
-        online = "https://docs.unrealengine.com/en-US/BlueprintAPI"
+        online_url = "https://docs.unrealengine.com/en-US/BlueprintAPI"
+        unpacking_directory = documents_directory
+    elif docset_type == "python":
+        api_directory = documents_directory
+        label = "Python"
+        processor = process_python_docset
+        online_url = "https://docs.unrealengine.com/en-US/PythonAPI"
+        temporary_directory = tempfile.TemporaryDirectory(delete=False)
+        unpacking_directory = Path(temporary_directory.name)
     else:
         logging.error("Unsupported docset type, exiting!")
         return
 
-    docset_label = f"Unreal Engine {label} Docset"
+    docset_label = f"Unreal Engine - {label} API"
 
-    logger.info('Extracting "%s" archive to "%s"...', input, documents_directory)
-    setuptools.archive_util.unpack_archive(input, str(documents_directory))
+    logger.info('Extracting "%s" archive to "%s"...', input, unpacking_directory)
+    setuptools.archive_util.unpack_archive(input, str(unpacking_directory))
 
     with chdir(api_directory):  # pyright: ignore
-        entries = processor(api_directory)
+        entries = processor(
+            api_directory=api_directory,
+            docset_name=docset_name,
+            online_url=online_url,
+            output_directory=output_directory,
+            unpacking_directory=unpacking_directory,
+        )
 
-    generate_database(
-        resources_directory / "docSet.dsidx", documents_directory, entries
-    )
+    if docset_type in ["c++", "blueprint"]:
+        generate_database(
+            resources_directory / "docSet.dsidx", documents_directory, entries
+        )
 
     mapping = [
         ("CFBundleIdentifier", "string", docset_name),
         ("CFBundleName", "string", docset_label),
         ("DashDocSetDeclaredInStyle", "string", "originalName"),
-        ("DashDocSetFallbackURL", "string", online),
+        ("DashDocSetFallbackURL", "string", online_url),
         ("DashDocSetFamily", "string", "python"),
         ("DocSetPlatformFamily", "string", "Unreal Engine"),
         ("isDashDocset", "true", None),
@@ -950,9 +1046,14 @@ def generate_docset(input: str, output: str) -> None:  # noqa: A002
     if docset_type == "c++":
         mapping.append(("dashIndexFilePath", "string", "en-US/API/index.html"))
     elif docset_type == "blueprint":
-        mapping.append(("dashIndexFilePath", "string", "en-US/BluepringAPI/index.html"))
+        mapping.append(("dashIndexFilePath", "string", "en-US/BlueprintAPI/index.html"))
+    elif docset_type == "python":
+        mapping.append(("dashIndexFilePath", "string", "index.html"))
 
     generate_plist(contents_directory / "Info.plist", mapping)
+
+    if docset_type == "python":
+        temporary_directory.cleanup()
 
     shutil.copyfile(
         Path(__file__).parent / "icon.png", Path(docset_directory) / "icon.png"
