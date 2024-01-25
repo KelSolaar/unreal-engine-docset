@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 license = "BSD-3-Clause"
 authors = ["Thomas Mansencal <thomas.mansencal@gmail.com>"]
-readme = "README.md"
+readme = "README.rst"
 
 [tool.poetry.dependencies]
 python = ">= 3.10, < 4"
